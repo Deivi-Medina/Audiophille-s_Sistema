@@ -1,7 +1,9 @@
 <?php
 // index.php - Punto de entrada único
 require_once 'config/database.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 require_once 'models/Database.php';
 $db = new Database();

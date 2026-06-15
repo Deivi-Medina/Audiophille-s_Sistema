@@ -1,7 +1,10 @@
 <?php
 // views/landing.php
 require_once __DIR__ . '/../config/database.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 
 // Leer mensajes de sesión (para errores de login/registro)
 $modal_message = $_SESSION['modal_message'] ?? null;
