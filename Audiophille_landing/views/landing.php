@@ -5,7 +5,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-
 // Leer mensajes de sesión (para errores de login/registro)
 $modal_message = $_SESSION['modal_message'] ?? null;
 $modal_type = $_SESSION['modal_type'] ?? null;
@@ -23,10 +22,13 @@ unset($_SESSION['modal_message'], $_SESSION['modal_type']);
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Archivos externos -->
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
+    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/components.css">
     <script src="<?= BASE_URL ?>assets/js/main.js" defer></script>
+    <script src="<?= BASE_URL ?>assets/js/landing.js" defer></script>
 </head>
 
-<body>
+<body data-message="<?= htmlspecialchars($modal_message ?? '', ENT_QUOTES, 'UTF-8') ?>"
+    data-type="<?= htmlspecialchars($modal_type ?? '', ENT_QUOTES, 'UTF-8') ?>">
 
     <!-- ==================== NAVBAR ==================== -->
     <nav class="navbar">
@@ -199,89 +201,69 @@ unset($_SESSION['modal_message'], $_SESSION['modal_type']);
     <!-- Modal de Inicio de Sesión -->
     <div id="loginModal" class="modal">
         <div class="modal-card">
-            <span class="close-modal" onclick="closeModal('loginModal')">&times;</span>
+            <span class="close-modal" data-modal="loginModal">&times;</span>
             <h2>Iniciar Sesión</h2>
             <form action="<?= BASE_URL ?>controllers/LoginController.php" method="POST">
-                <input type="email" name="email" placeholder="Correo electrónico" required>
-                <input type="password" name="password" placeholder="Contraseña" required>
-                <button type="submit" class="btn-primary w-full">Ingresar</button>
+                <div class="auth-input-group">
+                    <input type="email" name="email" placeholder="Correo electrónico" required>
+                </div>
+                <div class="auth-input-group">
+                    <div class="password-wrapper">
+                        <input type="password" name="password" placeholder="Contraseña" required>
+                        <button type="button" class="toggle-password" aria-label="Mostrar contraseña">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="auth-btn-primary">Ingresar</button>
             </form>
-            <p>¿No tienes cuenta? <a href="#" onclick="switchModal('register')">Regístrate aquí</a></p>
+            <p class="auth-link">¿No tienes cuenta? <a href="#" data-switch="register">Regístrate aquí</a></p>
         </div>
     </div>
 
-    <!-- Modal de Registro -->
+    <!-- Modal de Registro (con validación en tiempo real) -->
     <div id="registerModal" class="modal">
         <div class="modal-card">
-            <span class="close-modal" onclick="closeModal('registerModal')">&times;</span>
+            <span class="close-modal" data-modal="registerModal">&times;</span>
             <h2>Crear cuenta</h2>
             <form action="<?= BASE_URL ?>controllers/RegisterController.php" method="POST">
-                <input type="text" name="username" placeholder="Nombre de usuario" required>
-                <input type="email" name="email" placeholder="Correo electrónico" required>
-                <input type="password" name="password" placeholder="Contraseña" required>
-                <button type="submit" class="btn-primary w-full">Registrarse</button>
+                <div class="auth-input-group">
+                    <input type="text" name="username" placeholder="Nombre de usuario" required>
+                </div>
+                <div class="auth-input-group">
+                    <input type="email" name="email" placeholder="Correo electrónico" required>
+                </div>
+                <div class="auth-input-group">
+                    <div class="password-wrapper">
+                        <input type="password" name="password" id="registerPasswordModal" placeholder="Contraseña" required>
+                        <button type="button" class="toggle-password" aria-label="Mostrar contraseña">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+                    <div class="password-requirements" id="passwordRequirementsModal">
+                        <span class="req-item" data-rule="length"><span class="req-icon">⬜</span> Mínimo 8 caracteres</span>
+                        <span class="req-item" data-rule="uppercase"><span class="req-icon">⬜</span> Mayúscula</span>
+                        <span class="req-item" data-rule="lowercase"><span class="req-icon">⬜</span> Minúscula</span>
+                        <span class="req-item" data-rule="number"><span class="req-icon">⬜</span> Número</span>
+                        <span class="req-item" data-rule="symbol"><span class="req-icon">⬜</span> Símbolo</span>
+                    </div>
+                </div>
+                <button type="submit" class="auth-btn-primary">Registrarse</button>
             </form>
-            <p>¿Ya tienes cuenta? <a href="#" onclick="switchModal('login')">Inicia sesión aquí</a></p>
+            <p class="auth-link">¿Ya tienes cuenta? <a href="#" data-switch="login">Inicia sesión aquí</a></p>
         </div>
     </div>
 
     <!-- Modal de mensajes general (errores, éxito) -->
     <div id="messageModal" class="modal">
         <div class="modal-card">
-            <span class="close-modal" onclick="closeModal('messageModal')">&times;</span>
+            <span class="close-modal" data-modal="messageModal">&times;</span>
             <h2 id="modalTitle">Aviso</h2>
             <p id="modalMessage"></p>
-            <button class="btn-primary w-full" onclick="closeModal('messageModal')">Aceptar</button>
+            <button class="auth-btn-primary" id="modalAcceptBtn">Aceptar</button>
         </div>
     </div>
 
-    <script>
-        // Funciones para abrir/cerrar modales
-        function openModal(type) {
-            const modalId = (type === 'login') ? 'loginModal' : 'registerModal';
-            document.getElementById(modalId).style.display = 'flex';
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = 'none';
-        }
-
-        function switchModal(type) {
-            closeModal('loginModal');
-            closeModal('registerModal');
-            openModal(type);
-        }
-
-        // Cerrar modal al hacer clic fuera
-        window.onclick = function(event) {
-            const modals = document.querySelectorAll('.modal');
-            modals.forEach(modal => {
-                if (event.target === modal) modal.style.display = 'none';
-            });
-        }
-
-        // Mostrar modal de mensaje si hay datos desde la sesión
-        <?php if ($modal_message): ?>
-            window.addEventListener('DOMContentLoaded', () => {
-                const modal = document.getElementById('messageModal');
-                const title = document.getElementById('modalTitle');
-                const msg = document.getElementById('modalMessage');
-                title.innerText = <?= json_encode($modal_type === 'error' ? 'Error' : 'Éxito') ?>;
-                msg.innerText = <?= json_encode($modal_message) ?>;
-                modal.style.display = 'flex';
-            });
-        <?php endif; ?>
-
-        // Botones para abrir modales desde la landing
-        document.getElementById('openLoginBtn')?.addEventListener('click', () => openModal('login'));
-        document.getElementById('openRegisterBtn')?.addEventListener('click', () => openModal('register'));
-        document.getElementById('heroRegisterBtn')?.addEventListener('click', () => openModal('register'));
-
-        // Inicializar iconos Lucide
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-        });
-    </script>
 </body>
 
 </html>

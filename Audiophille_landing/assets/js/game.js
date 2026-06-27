@@ -1,7 +1,9 @@
 // js/game.js
 import { audio, isPlaying, queue, queueIndex, playActiveSong, setQueue } from "./audio.js";
 import { state } from "./var.js";
+import { setGameKeyboardMode } from "./keyboard.js";
 
+// ==================== ESTADO DEL JUEGO ====================
 let currentGameSong = null;
 let currentOptions = [];
 let currentCorrectAnswer = "";
@@ -9,15 +11,19 @@ let currentRoundActive = true;
 let score = 0;
 let previousSongId = null;
 let fragmentTimeout = null;
-let wasPlayingBeforeGame = false;
-let previousQueue = null;
-let previousQueueIndex = null;
 let audioCtx = null;
 
-let gameCover, gameScore, gameOptionsContainer, gameNextBtn, gameMessage, gamePlayingIndicator;
+// ==================== ESTADO DE LA MÚSICA PRINCIPAL ====================
+let savedQueue = null;
+let savedQueueIndex = 0;
+let savedCurrentTime = 0;
+let wasPlayingBeforeGame = false;
 
+// ==================== DOM ELEMENTS ====================
+let gameCover, gameScore, gameOptionsContainer, gameNextBtn, gameMessage, gamePlayingIndicator;
 let currentPlayPromise = null;
 
+// ==================== INICIALIZACIÓN ====================
 export function initGameDOM() {
   gameCover = document.getElementById("gameCover");
   gameScore = document.getElementById("gameScore");
@@ -31,6 +37,7 @@ export function initGameDOM() {
   }
 }
 
+// ==================== SONIDOS Y EFECTOS ====================
 function playBeep(type) {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -41,7 +48,7 @@ function playBeep(type) {
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.type = "sine";
-  let frequency = type === "correct" ? 880 : 440;
+  const frequency = type === "correct" ? 880 : 440;
   osc.frequency.value = frequency;
   gain.gain.setValueAtTime(0.1, now);
   gain.gain.exponentialRampToValueAtTime(0.00001, now + 0.5);
@@ -51,37 +58,167 @@ function playBeep(type) {
 
 function launchConfetti() {
   if (typeof confetti === "function") {
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#a855f7", "#c084fc", "#e0b0ff"] });
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ["#a855f7", "#c084fc", "#e0b0ff"],
+    });
   }
 }
 
+// ==================== FUNCIONES PRINCIPALES ====================
 export function startGame() {
-  if (isPlaying) {
-    wasPlayingBeforeGame = true;
-    audio.pause();
+  console.log("🎮 Iniciando juego...");
+
+  // ✅ Activar modo teclado del juego (bloquear atajos)
+  setGameKeyboardMode(true);
+
+  // ✅ Guardar estado de la música principal
+  const hasQueue = queue && queue.length > 0;
+  const isSongPlaying = isPlaying || !audio.paused;
+
+  if (hasQueue && queue[queueIndex]) {
+    wasPlayingBeforeGame = isSongPlaying;
+    savedQueue = [...queue];
+    savedQueueIndex = queueIndex;
+    savedCurrentTime = audio.currentTime || 0;
+
+    if (isSongPlaying) {
+      audio.pause();
+    }
   } else {
     wasPlayingBeforeGame = false;
+    savedQueue = null;
+    savedQueueIndex = 0;
+    savedCurrentTime = 0;
   }
-  previousQueue = [...queue];
-  previousQueueIndex = queueIndex;
+
+  // ✅ Resetear estado del juego
   score = 0;
+  previousSongId = null;
   updateScore();
+
+  // ✅ Iniciar primera ronda
   loadNewRound();
 }
 
 export function stopGame() {
-  if (fragmentTimeout) clearTimeout(fragmentTimeout);
-  audio.pause();
+  console.log("🎮 Deteniendo juego...");
+
+  // ✅ Desactivar modo teclado del juego (restaurar atajos)
+  setGameKeyboardMode(false);
+
+  // ✅ Limpiar fragmento del juego
+  if (fragmentTimeout) {
+    clearTimeout(fragmentTimeout);
+    fragmentTimeout = null;
+  }
+
   audio.removeEventListener("timeupdate", stopFragment);
-  if (wasPlayingBeforeGame && previousQueue && previousQueue.length > 0) {
-    setQueue(previousQueue, previousQueueIndex);
-    playActiveSong();
+  audio.pause();
+
+  // ✅ Restaurar la música principal
+  restoreMainMusic();
+
+  // ✅ Limpiar estado del juego
+  currentGameSong = null;
+  currentOptions = [];
+  currentCorrectAnswer = "";
+  currentRoundActive = true;
+}
+
+function restoreMainMusic() {
+  if (savedQueue && savedQueue.length > 0) {
+    console.log("🎵 Restaurando música principal...");
+
+    setQueue(savedQueue, savedQueueIndex);
+
+    const song = savedQueue[savedQueueIndex];
+    if (song && song.file) {
+      audio.src = song.file;
+      audio.load();
+
+      const onCanPlay = () => {
+        audio.removeEventListener("canplay", onCanPlay);
+        audio.currentTime = savedCurrentTime;
+
+        if (wasPlayingBeforeGame) {
+          audio.play().catch((err) => {
+            console.warn("Error al reanudar:", err);
+          });
+        } else {
+          audio.pause();
+          if (typeof updatePlayingUIs === "function") {
+            updatePlayingUIs(false);
+          }
+        }
+      };
+
+      audio.addEventListener("canplay", onCanPlay);
+    }
+  } else {
+    audio.src = "";
+    audio.load();
+  }
+
+  updateMiniPlayerStatus(false);
+}
+
+// ==================== MANEJO DEL MINI REPRODUCTOR ====================
+export function updateMiniPlayerStatus(isGameActive) {
+  const miniPlayer = document.getElementById("miniPlayer");
+  if (!miniPlayer) return;
+
+  // ✅ Limpiar mensaje anterior
+  const oldStatus = document.getElementById("gameStatusMessage");
+  if (oldStatus) oldStatus.remove();
+
+  if (isGameActive) {
+    miniPlayer.classList.add("hidden");
+
+    const statusMsg = document.createElement("div");
+    statusMsg.id = "gameStatusMessage";
+    statusMsg.style.cssText = `
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(168, 85, 247, 0.9);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-weight: 600;
+      font-size: 14px;
+      z-index: 9999;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(168, 85, 247, 0.3);
+      animation: pulseGlow 2s infinite;
+    `;
+    statusMsg.innerHTML = `🎮 <span style="font-weight:700;">Juego activo</span> · La música está en pausa · <span style="opacity:0.8;font-weight:400;">Usa el mouse para jugar</span>`;
+    document.body.appendChild(statusMsg);
+
+    if (!document.getElementById("gameStatusStyles")) {
+      const style = document.createElement("style");
+      style.id = "gameStatusStyles";
+      style.textContent = `
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 8px 32px rgba(168, 85, 247, 0.3); }
+          50% { box-shadow: 0 8px 32px rgba(168, 85, 247, 0.6); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  } else {
+    miniPlayer.classList.remove("hidden");
   }
 }
 
+// ==================== LÓGICA DEL JUEGO ====================
 async function loadNewRound() {
   const container = document.querySelector(".game-container");
   if (container) container.style.opacity = "0";
+
   setTimeout(async () => {
     if (gameMessage) {
       gameMessage.innerText = "";
@@ -91,37 +228,7 @@ async function loadNewRound() {
     if (gameNextBtn) gameNextBtn.disabled = false;
     currentRoundActive = true;
 
-    // Obtener canciones desde los datos globales cargados por la API
-    const albums = window.albumsFromDB || [];
-    let allSongs = [];
-
-    albums.forEach((album) => {
-      if (album.songs && Array.isArray(album.songs)) {
-        album.songs.forEach((song) => {
-          allSongs.push({
-            ...song,
-            trackTitle: song.trackTitle,
-            file: song.file || song.archivo_url, // compatibilidad con API
-            artistName: song.artistName || album.artist,
-            albumCover: song.albumCover || album.cover,
-            albumTitle: album.title,
-          });
-        });
-      }
-    });
-
-    // Añadir canciones importadas por el usuario (state.importedSongs viene de API)
-    if (state.importedSongs && Array.isArray(state.importedSongs)) {
-      state.importedSongs.forEach((song) => {
-        allSongs.push({
-          ...song,
-          trackTitle: song.trackTitle,
-          file: song.file || song.archivo_url,
-          artistName: song.artistName || "Importado",
-          albumCover: song.albumCover || "https://images.unsplash.com/photo-1487180142328-0c4e37023af5?q=80&w=500",
-        });
-      });
-    }
+    const allSongs = getAllSongs();
 
     if (allSongs.length === 0) {
       if (gameMessage) gameMessage.innerText = "No hay canciones. Importa alguna.";
@@ -138,23 +245,17 @@ async function loadNewRound() {
     previousSongId = currentGameSong.file;
     currentCorrectAnswer = currentGameSong.trackTitle;
 
+    // ✅ Mostrar carátula con logging para depurar
     if (gameCover) {
-      gameCover.src = currentGameSong.albumCover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400";
+      let coverUrl = currentGameSong.albumCover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400";
+      gameCover.src = coverUrl;
+      console.log(`🎵 Carátula de "${currentGameSong.trackTitle}":`, coverUrl);
+      console.log(`   Álbum ID: ${currentGameSong.albumId || "N/A"}`);
     }
 
-    let incorrectOptions = [];
-    const otherSongs = allSongs.filter((s) => s.file !== currentGameSong.file);
-    for (let i = 0; i < 2 && otherSongs.length > 0; i++) {
-      const rand = Math.floor(Math.random() * otherSongs.length);
-      incorrectOptions.push(otherSongs[rand].trackTitle);
-      otherSongs.splice(rand, 1);
-    }
-    while (incorrectOptions.length < 2) incorrectOptions.push("???");
+    const incorrectOptions = generateIncorrectOptions(allSongs, currentGameSong.file);
     currentOptions = [currentCorrectAnswer, ...incorrectOptions];
-    for (let i = currentOptions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [currentOptions[i], currentOptions[j]] = [currentOptions[j], currentOptions[i]];
-    }
+    shuffleArray(currentOptions);
 
     renderOptions();
     await playFragment();
@@ -163,9 +264,84 @@ async function loadNewRound() {
   }, 200);
 }
 
+function getAllSongs() {
+  const albums = window.albumsFromDB || [];
+  const allSongs = [];
+
+  albums.forEach((album) => {
+    if (album.songs && Array.isArray(album.songs)) {
+      album.songs.forEach((song) => {
+        // ✅ Mejor detección de carátula
+        let coverUrl = album.caratula_url || album.cover;
+
+        // ✅ Si la carátula está vacía o es la URL por defecto, intentar obtenerla de la ruta
+        if (!coverUrl || coverUrl === "" || coverUrl === "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400") {
+          // Si es un álbum creado por el usuario, buscar en uploads/covers
+          if (album.id_album) {
+            // La carátula podría estar en la base de datos, si no, usar fallback
+            console.warn(`⚠️ Álbum "${album.title}" (ID: ${album.id_album}) sin carátula válida. Usando fallback.`);
+          }
+          coverUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400";
+        }
+
+        allSongs.push({
+          ...song,
+          trackTitle: song.trackTitle,
+          file: song.file || song.archivo_url,
+          artistName: song.artistName || album.artist,
+          albumCover: coverUrl,
+          albumTitle: album.title,
+          albumId: album.id_album,
+        });
+      });
+    }
+  });
+
+  if (state.importedSongs && Array.isArray(state.importedSongs)) {
+    state.importedSongs.forEach((song) => {
+      allSongs.push({
+        ...song,
+        trackTitle: song.trackTitle,
+        file: song.file || song.archivo_url,
+        artistName: song.artistName || "Importado",
+        albumCover: song.albumCover || "https://images.unsplash.com/photo-1487180142328-0c4e37023af5?q=80&w=500",
+      });
+    });
+  }
+
+  return allSongs;
+}
+
+function generateIncorrectOptions(allSongs, currentFile) {
+  const incorrect = [];
+  const otherSongs = allSongs.filter((s) => s.file !== currentFile);
+
+  for (let i = 0; i < 2 && otherSongs.length > 0; i++) {
+    const rand = Math.floor(Math.random() * otherSongs.length);
+    incorrect.push(otherSongs[rand].trackTitle);
+    otherSongs.splice(rand, 1);
+  }
+
+  while (incorrect.length < 2) {
+    incorrect.push("???");
+  }
+
+  return incorrect;
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// ==================== UI DEL JUEGO ====================
 function renderOptions() {
   if (!gameOptionsContainer) return;
   gameOptionsContainer.innerHTML = "";
+
   currentOptions.forEach((option) => {
     const btn = document.createElement("button");
     btn.className = "game-option-btn";
@@ -173,94 +349,6 @@ function renderOptions() {
     btn.addEventListener("click", () => checkAnswer(btn, option));
     gameOptionsContainer.appendChild(btn);
   });
-}
-
-async function playFragment() {
-  if (currentPlayPromise) {
-    audio.pause();
-    try {
-      await currentPlayPromise;
-    } catch (e) {}
-    currentPlayPromise = null;
-  }
-
-  audio.pause();
-  audio.removeEventListener("timeupdate", stopFragment);
-  audio.src = currentGameSong.file;
-  audio.currentTime = 0;
-
-  try {
-    currentPlayPromise = audio.play();
-    await currentPlayPromise;
-    currentPlayPromise = null;
-    if (gamePlayingIndicator) gamePlayingIndicator.style.display = "flex";
-
-    if (fragmentTimeout) clearTimeout(fragmentTimeout);
-    fragmentTimeout = setTimeout(() => {
-      if (!audio.paused) audio.pause();
-      if (gamePlayingIndicator) gamePlayingIndicator.style.display = "none";
-    }, 10000);
-    audio.addEventListener("timeupdate", stopFragment);
-  } catch (err) {
-    console.warn("Error al reproducir fragmento:", err);
-    currentPlayPromise = null;
-    if (gamePlayingIndicator) gamePlayingIndicator.style.display = "none";
-  }
-}
-
-function stopFragment() {
-  if (audio.currentTime >= 10) {
-    if (currentPlayPromise) {
-      currentPlayPromise
-        .then(() => {
-          audio.pause();
-          cleanup();
-        })
-        .catch(() => cleanup());
-    } else {
-      audio.pause();
-      cleanup();
-    }
-    function cleanup() {
-      if (fragmentTimeout) clearTimeout(fragmentTimeout);
-      if (gamePlayingIndicator) gamePlayingIndicator.style.display = "none";
-      audio.removeEventListener("timeupdate", stopFragment);
-    }
-  }
-}
-
-function checkAnswer(btn, selected) {
-  if (!currentRoundActive) return;
-  currentRoundActive = false;
-  enableOptions(false);
-
-  const isCorrect = selected === currentCorrectAnswer;
-  if (isCorrect) {
-    score++;
-    updateScore();
-    btn.classList.add("correct");
-    if (gameMessage) {
-      gameMessage.innerText = "✅ ¡Correcto!";
-      gameMessage.classList.add("correct-msg");
-    }
-    playBeep("correct");
-    launchConfetti();
-  } else {
-    btn.classList.add("incorrect");
-    const btns = document.querySelectorAll(".game-option-btn");
-    btns.forEach((b) => {
-      if (b.innerText === currentCorrectAnswer) b.classList.add("correct");
-    });
-    if (gameMessage) {
-      gameMessage.innerText = `❌ Incorrecto. Era "${currentCorrectAnswer}".`;
-      gameMessage.classList.add("incorrect-msg");
-    }
-    playBeep("wrong");
-    btn.style.transform = "translateX(4px)";
-    setTimeout(() => {
-      btn.style.transform = "";
-    }, 150);
-  }
 }
 
 function enableOptions(enable) {
@@ -279,10 +367,127 @@ function updateScore() {
   if (gameScore) gameScore.innerText = `Puntuación: ${score}`;
 }
 
-export function nextRound() {
-  if (fragmentTimeout) clearTimeout(fragmentTimeout);
+// ==================== REPRODUCCIÓN DEL FRAGMENTO ====================
+async function playFragment() {
+  if (currentPlayPromise) {
+    audio.pause();
+    try {
+      await currentPlayPromise;
+    } catch (e) {}
+    currentPlayPromise = null;
+  }
+
   audio.pause();
   audio.removeEventListener("timeupdate", stopFragment);
-  if (gamePlayingIndicator) gamePlayingIndicator.style.display = "none";
+  audio.src = currentGameSong.file;
+  audio.load();
+  audio.currentTime = 0;
+
+  try {
+    currentPlayPromise = audio.play();
+    await currentPlayPromise;
+    currentPlayPromise = null;
+
+    if (gamePlayingIndicator) {
+      gamePlayingIndicator.style.display = "flex";
+    }
+
+    if (fragmentTimeout) {
+      clearTimeout(fragmentTimeout);
+    }
+
+    fragmentTimeout = setTimeout(() => {
+      if (!audio.paused) audio.pause();
+      if (gamePlayingIndicator) {
+        gamePlayingIndicator.style.display = "none";
+      }
+    }, 10000);
+
+    audio.addEventListener("timeupdate", stopFragment);
+  } catch (err) {
+    console.warn("Error al reproducir fragmento:", err);
+    currentPlayPromise = null;
+    if (gamePlayingIndicator) {
+      gamePlayingIndicator.style.display = "none";
+    }
+  }
+}
+
+function stopFragment() {
+  if (audio.currentTime >= 10) {
+    if (currentPlayPromise) {
+      currentPlayPromise
+        .then(() => {
+          audio.pause();
+          cleanup();
+        })
+        .catch(() => cleanup());
+    } else {
+      audio.pause();
+      cleanup();
+    }
+
+    function cleanup() {
+      if (fragmentTimeout) {
+        clearTimeout(fragmentTimeout);
+        fragmentTimeout = null;
+      }
+      if (gamePlayingIndicator) {
+        gamePlayingIndicator.style.display = "none";
+      }
+      audio.removeEventListener("timeupdate", stopFragment);
+    }
+  }
+}
+
+// ==================== VERIFICACIÓN DE RESPUESTA ====================
+function checkAnswer(btn, selected) {
+  if (!currentRoundActive) return;
+  currentRoundActive = false;
+  enableOptions(false);
+
+  const isCorrect = selected === currentCorrectAnswer;
+
+  if (isCorrect) {
+    score++;
+    updateScore();
+    btn.classList.add("correct");
+    if (gameMessage) {
+      gameMessage.innerText = "✅ ¡Correcto!";
+      gameMessage.classList.add("correct-msg");
+    }
+    playBeep("correct");
+    launchConfetti();
+  } else {
+    btn.classList.add("incorrect");
+    const btns = document.querySelectorAll(".game-option-btn");
+    btns.forEach((b) => {
+      if (b.innerText === currentCorrectAnswer) {
+        b.classList.add("correct");
+      }
+    });
+    if (gameMessage) {
+      gameMessage.innerText = `❌ Incorrecto. Era "${currentCorrectAnswer}".`;
+      gameMessage.classList.add("incorrect-msg");
+    }
+    playBeep("wrong");
+    btn.style.transform = "translateX(4px)";
+    setTimeout(() => {
+      btn.style.transform = "";
+    }, 150);
+  }
+}
+
+// ==================== SIGUIENTE RONDA ====================
+export function nextRound() {
+  if (fragmentTimeout) {
+    clearTimeout(fragmentTimeout);
+    fragmentTimeout = null;
+  }
+  audio.pause();
+  audio.removeEventListener("timeupdate", stopFragment);
+  if (gamePlayingIndicator) {
+    gamePlayingIndicator.style.display = "none";
+  }
   loadNewRound();
 }

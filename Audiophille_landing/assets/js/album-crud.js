@@ -2,27 +2,19 @@
 import DOM, { state, loadInitialData } from "./var.js";
 import { renderAlbumCards, openAlbumView } from "./ui.js";
 import { showSection } from "./navigation.js";
-import { openEditPlaylistModal, confirmEditPlaylistChanges, deleteActivePlaylist } from "./playlist.js";
+import { openEditPlaylistModal, deleteActivePlaylist } from "./playlist.js";
 import { showAlert, showConfirm } from "./modals.js";
 
 let editAlbumTempSongs = [];
+let tempCoverFile = null;
 
-// Obtener el array global de álbumes (cargado desde API)
 function getAlbums() {
   return window.albumsFromDB || [];
 }
 
-// Encontrar índice de un álbum por su ID
-function findAlbumIndexById(albumId) {
-  const albums = getAlbums();
-  return albums.findIndex((a) => a.id_album == albumId);
-}
-
-// Cargar datos actualizados desde la API y refrescar UI
 async function refreshDataAndUI() {
-  await loadInitialData(); // Recarga window.albumsFromDB, playlists, favoritos, etc.
-  renderAlbumCards(); // Refresca la vista de inicio
-  // Si había un álbum activo, volver a abrirlo (opcional)
+  await loadInitialData();
+  renderAlbumCards();
   if (state.activeAlbumIndex !== null) {
     const albums = getAlbums();
     if (state.activeAlbumIndex < albums.length) {
@@ -33,25 +25,70 @@ async function refreshDataAndUI() {
   }
 }
 
+// Listener para el input de portada (se ejecuta al seleccionar un archivo)
+if (DOM.editAlbumModal?.coverFileInput) {
+  DOM.editAlbumModal.coverFileInput.addEventListener("change", function (e) {
+    const file = this.files[0];
+    if (file) {
+      // Guardar el archivo para subirlo después
+      tempCoverFile = file;
+
+      // Solo previsualización (NO se asigna a inputCover)
+      const preview = document.getElementById("editCoverPreview");
+      if (preview) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          preview.src = ev.target.result;
+          preview.style.display = "block";
+        };
+        reader.readAsDataURL(file);
+      }
+    } else {
+      tempCoverFile = null;
+      const preview = document.getElementById("editCoverPreview");
+      if (preview) {
+        preview.src = "";
+        preview.style.display = "none";
+      }
+    }
+  });
+}
+
 export async function openEditAlbumModal() {
   if (state.activePlaylistName) {
     openEditPlaylistModal();
+    tempCoverFile = null;
+    const preview = document.getElementById("editCoverPreview");
+    if (preview) {
+      preview.src = "";
+      preview.style.display = "none";
+    }
     return;
   }
+
   const albumIndex = state.activeAlbumIndex;
   if (albumIndex === null) return;
   const albums = getAlbums();
   const album = albums[albumIndex];
   if (!album) return;
-  // Verificar si es el álbum virtual de importados (por título o por propiedad)
+
   if (album.title === "Mis Archivos Importados" || album.es_importado) {
     await showAlert("Este álbum virtual no se puede editar.", "Información");
     return;
   }
+
+  // Resetear estado de imagen
+  tempCoverFile = null;
+  const preview = document.getElementById("editCoverPreview");
+  if (preview) {
+    preview.src = "";
+    preview.style.display = "none";
+  }
+
   if (DOM.editAlbumModal.inputTitle) DOM.editAlbumModal.inputTitle.value = album.title;
   if (DOM.editAlbumModal.inputArtist) DOM.editAlbumModal.inputArtist.value = album.artist;
   if (DOM.editAlbumModal.inputCover) DOM.editAlbumModal.inputCover.value = album.cover;
-  // Copiar canciones actuales para edición local
+
   editAlbumTempSongs = album.songs.map((s) => ({ ...s }));
   renderEditAlbumSongsList();
   if (DOM.editAlbumModal.modal) DOM.editAlbumModal.modal.classList.remove("hidden");
@@ -62,6 +99,12 @@ export function closeEditAlbumModal() {
   if (DOM.editAlbumModal.headerTitle) DOM.editAlbumModal.headerTitle.innerText = "Editar Álbum";
   if (DOM.editAlbumModal.lblTitle) DOM.editAlbumModal.lblTitle.innerText = "Título del Álbum";
   if (DOM.editAlbumModal.artistGroup) DOM.editAlbumModal.artistGroup.style.display = "block";
+  tempCoverFile = null;
+  const preview = document.getElementById("editCoverPreview");
+  if (preview) {
+    preview.src = "";
+    preview.style.display = "none";
+  }
 }
 
 export function renderEditAlbumSongsList() {
@@ -74,15 +117,12 @@ export function renderEditAlbumSongsList() {
   }
   editAlbumTempSongs.forEach((song, idx) => {
     const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.alignItems = "center";
-    row.style.gap = "8px";
-    row.style.marginBottom = "6px";
+    row.style.cssText = "display:flex; align-items:center; gap:8px; margin-bottom:6px;";
     row.innerHTML = `
-            <span style="font-size:12px; color:var(--text-secondary); width:20px;">${idx + 1}</span>
-            <input type="text" value="${song.trackTitle.replace(/"/g, "&quot;")}" placeholder="Título..." style="flex:1; background:#1c1c24; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:6px 10px; color:#fff; font-size:13px; outline:none;">
-            <button class="btn-delete-temp-song" style="background:rgba(255,69,58,0.1); border:none; color:#ff453a; width:28px; height:28px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i data-lucide="trash-2" style="width:14px; height:14px;"></i></button>
-        `;
+      <span style="font-size:12px; color:var(--text-secondary); width:20px;">${idx + 1}</span>
+      <input type="text" value="${song.trackTitle.replace(/"/g, "&quot;")}" placeholder="Título..." style="flex:1; background:#1c1c24; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:6px 10px; color:#fff; font-size:13px; outline:none;">
+      <button class="btn-delete-temp-song" style="background:rgba(255,69,58,0.1); border:none; color:#ff453a; width:28px; height:28px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i data-lucide="trash-2" style="width:14px; height:14px;"></i></button>
+    `;
     const input = row.querySelector("input");
     input.addEventListener("input", (e) => {
       editAlbumTempSongs[idx].trackTitle = e.target.value;
@@ -108,18 +148,65 @@ export function handleEditAlbumAddLocalSong(file) {
 }
 
 export async function confirmEditAlbumChanges() {
+  // ---- CASO PLAYLIST ----
   if (state.activePlaylistName) {
     const oldName = state.activePlaylistName;
     const nextName = DOM.editAlbumModal.inputTitle?.value.trim();
-    const nextCover = DOM.editAlbumModal.inputCover?.value.trim();
     if (!nextName) {
       await showAlert("Nombre de playlist requerido.", "Campo vacío");
       return;
     }
-    confirmEditPlaylistChanges(oldName, nextName, nextCover, editAlbumTempSongs);
+    const playlist = state.playlists[oldName];
+    if (!playlist) {
+      await showAlert("Playlist no encontrada.", "Error");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("action", "update_playlist");
+    formData.append("id_playlist", playlist.id_playlist);
+    formData.append("nombre", nextName);
+
+    if (tempCoverFile) {
+      formData.append("cover_file", tempCoverFile);
+    } else {
+      const coverUrl = DOM.editAlbumModal.inputCover?.value.trim();
+      if (coverUrl) {
+        formData.append("portada_url", coverUrl);
+      }
+    }
+
+    const songIds = editAlbumTempSongs.map((s) => s.id_cancion).filter((id) => id);
+    formData.append("canciones", JSON.stringify(songIds));
+
+    try {
+      const response = await fetch(`${window.baseUrl}api.php`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (data.success) {
+        await refreshDataAndUI();
+        closeEditAlbumModal();
+        showSection(`playlist:${nextName}`);
+        tempCoverFile = null;
+        const preview = document.getElementById("editCoverPreview");
+        if (preview) {
+          preview.src = "";
+          preview.style.display = "none";
+        }
+      } else {
+        await showAlert(data.message || "Error al actualizar playlist", "Error");
+      }
+    } catch (error) {
+      console.error(error);
+      await showAlert("Error de conexión", "Error");
+    }
     return;
   }
 
+  // ---- CASO ÁLBUM ----
   const albumIndex = state.activeAlbumIndex;
   if (albumIndex === null) return;
   const albums = getAlbums();
@@ -129,37 +216,50 @@ export async function confirmEditAlbumChanges() {
   const nextTitle = DOM.editAlbumModal.inputTitle?.value.trim();
   const nextArtist = DOM.editAlbumModal.inputArtist?.value.trim();
   const nextCover = DOM.editAlbumModal.inputCover?.value.trim();
+
   if (!nextTitle || !nextArtist) {
     await showAlert("Rellena título y artista.", "Datos incompletos");
     return;
   }
 
-  // Construir FormData para enviar a la API
   const formData = new FormData();
   formData.append("action", "update_album");
   formData.append("id_album", album.id_album);
   formData.append("titulo", nextTitle);
   formData.append("artista", nextArtist);
-  formData.append("caratula", nextCover || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400");
-  // Enviar lista de canciones (como JSON)
+
+  if (tempCoverFile) {
+    formData.append("cover_file", tempCoverFile);
+  } else if (nextCover) {
+    formData.append("caratula", nextCover);
+  }
+
   const songsData = editAlbumTempSongs.map((s) => ({
     trackTitle: s.trackTitle || "Pista sin título",
     file: s.file,
-    // Si la canción tiene id_cancion (existente), enviarlo para actualizar, si no es nueva
     id_cancion: s.id_cancion || null,
   }));
   formData.append("canciones", JSON.stringify(songsData));
 
   try {
-    const response = await fetch(`${window.baseUrl}api.php`, { method: "POST", body: formData });
+    const response = await fetch(`${window.baseUrl}api.php`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
     const data = await response.json();
     if (data.success) {
       await refreshDataAndUI();
       closeEditAlbumModal();
-      // Volver a abrir el álbum editado
       const newAlbums = getAlbums();
       const newIndex = newAlbums.findIndex((a) => a.id_album == album.id_album);
       if (newIndex !== -1) openAlbumView(newIndex);
+      tempCoverFile = null;
+      const preview = document.getElementById("editCoverPreview");
+      if (preview) {
+        preview.src = "";
+        preview.style.display = "none";
+      }
     } else {
       await showAlert(data.message || "Error al guardar cambios", "Error");
     }

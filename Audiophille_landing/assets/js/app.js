@@ -64,8 +64,35 @@ async function initApp() {
   if (DOM.sidebar.navHome) DOM.sidebar.navHome.addEventListener("click", () => showSection("home"));
   if (DOM.sidebar.navFavorites) DOM.sidebar.navFavorites.addEventListener("click", () => showSection("favorites"));
   if (DOM.sidebar.navDiary) DOM.sidebar.navDiary.addEventListener("click", () => showSection("diary"));
-  if (DOM.sidebar.navGame) DOM.sidebar.navGame.addEventListener("click", () => showSection("game"));
-  if (DOM.sidebar.navProfile) DOM.sidebar.navProfile.addEventListener("click", () => showSection("profile"));
+
+  // -------------------- CORRECCIÓN DEL JUEGO --------------------
+  if (DOM.sidebar.navGame) {
+    DOM.sidebar.navGame.addEventListener("click", () => {
+      console.log("🎮 Click en Juego");
+      showSection("game");
+      // Esperamos a que el DOM del juego esté visible antes de iniciarlo
+      setTimeout(() => {
+        if (typeof startGame === "function") {
+          console.log("🟢 Iniciando juego...");
+          startGame();
+        } else {
+          console.warn("⚠️ startGame no está definida");
+        }
+      }, 100);
+    });
+  }
+  // -------------------------------------------------------------
+
+  if (DOM.sidebar.navProfile) {
+    DOM.sidebar.navProfile.addEventListener("click", () => {
+      showSection("profile");
+      setTimeout(() => {
+        if (typeof window.loadProfileData === "function") {
+          window.loadProfileData();
+        }
+      }, 100);
+    });
+  }
   if (DOM.sidebar.btnCreatePlaylist) DOM.sidebar.btnCreatePlaylist.addEventListener("click", openPlaylistModal);
   if (DOM.modal.btnClose) DOM.modal.btnClose.addEventListener("click", closePlaylistModal);
   if (DOM.modal.btnCancel) DOM.modal.btnCancel.addEventListener("click", closePlaylistModal);
@@ -107,7 +134,7 @@ async function initApp() {
     if (DOM.sidebar.navDiary) DOM.sidebar.navDiary.classList.remove("hidden");
   };
 
-  // Ecualizador (código resumido, se mantiene igual)
+  // Ecualizador
   if (DOM.equalizer.btnToggle && DOM.equalizer.sidebar) {
     DOM.equalizer.btnToggle.addEventListener("click", () => {
       DOM.equalizer.sidebar.classList.toggle("collapsed");
@@ -139,7 +166,7 @@ async function initApp() {
     });
   }
 
-  // Asistente musik (resumido)
+  // Asistente musik
   if (DOM.musikWidget.btnTrigger && DOM.musikWidget.chatWindow) {
     DOM.musikWidget.btnTrigger.addEventListener("click", () => DOM.musikWidget.chatWindow.classList.toggle("musik-hidden"));
   }
@@ -170,21 +197,12 @@ async function initApp() {
   if (DOM.editAlbumModal.btnConfirm) DOM.editAlbumModal.btnConfirm.addEventListener("click", confirmEditAlbumChanges);
   if (DOM.editAlbumModal.btnUploadCover && DOM.editAlbumModal.coverFileInput) {
     DOM.editAlbumModal.btnUploadCover.addEventListener("click", () => DOM.editAlbumModal.coverFileInput.click());
-    DOM.editAlbumModal.coverFileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          DOM.editAlbumModal.inputCover.value = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-      }
-    });
   }
   if (DOM.editAlbumModal.btnAddSong && DOM.editAlbumModal.addSongFileInput) {
     DOM.editAlbumModal.btnAddSong.addEventListener("click", () => DOM.editAlbumModal.addSongFileInput.click());
     DOM.editAlbumModal.addSongFileInput.addEventListener("change", (e) => {
-      if (e.target.files[0]) handleEditAlbumAddLocalSong(e.target.files[0]);
+      const file = e.target.files[0];
+      if (file) handleEditAlbumAddLocalSong(file);
     });
   }
 
@@ -228,11 +246,10 @@ async function initApp() {
   if (window.lucide) window.lucide.createIcons();
 }
 
-// ================== FUNCIONES DE PERFIL (corregidas con IDs únicos y mejor manejo de avatar) ==================
+// ================== FUNCIONES DE PERFIL ==================
 window.loadProfileData = async function loadProfileData() {
   console.log("🔄 loadProfileData ejecutándose...");
 
-  // Esperar a que exista el elemento del perfil
   let tries = 0;
   while (!document.getElementById("statProfileAvgRating") && tries < 20) {
     await new Promise((r) => setTimeout(r, 100));
@@ -246,7 +263,6 @@ window.loadProfileData = async function loadProfileData() {
   }
 
   try {
-    // Perfil
     const profileRes = await fetch(`${window.baseUrl}api.php?action=get_user_profile`);
     const profile = await profileRes.json();
     if (profile.success) {
@@ -255,19 +271,14 @@ window.loadProfileData = async function loadProfileData() {
       const avatar = document.getElementById("profileAvatar");
       if (profile.user.avatar) {
         let avatarPath = profile.user.avatar;
-        // Eliminar barra inicial si la tiene (para evitar doble barra)
-        if (avatarPath.startsWith("/")) {
-          avatarPath = avatarPath.substring(1);
-        }
+        if (avatarPath.startsWith("/")) avatarPath = avatarPath.substring(1);
         let base = window.baseUrl.endsWith("/") ? window.baseUrl : window.baseUrl + "/";
-        // Añadir timestamp para evitar caché
         avatar.src = base + avatarPath + "?v=" + Date.now();
       } else {
         avatar.src = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(profile.user.nombre_usuario)}`;
       }
     }
 
-    // Estadísticas
     const statsRes = await fetch(`${window.baseUrl}api.php?action=get_user_stats`);
     const stats = await statsRes.json();
     console.log("📊 Estadísticas recibidas:", stats);
@@ -287,7 +298,7 @@ window.loadProfileData = async function loadProfileData() {
   }
 };
 
-// Configurar eventos del modal de edición
+// Configurar eventos del modal de edición de perfil
 function setupProfileEvents() {
   const editBtn = document.getElementById("editProfileBtn");
   const modal = document.getElementById("editProfileModal");
@@ -335,7 +346,7 @@ function setupProfileEvents() {
       if (data.success) {
         alert("Perfil actualizado correctamente");
         closeModal();
-        window.loadProfileData(); // Recargar datos
+        window.loadProfileData();
       } else {
         alert("Error: " + data.message);
       }

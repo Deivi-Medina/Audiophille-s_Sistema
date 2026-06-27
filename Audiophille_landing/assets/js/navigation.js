@@ -2,7 +2,7 @@
 import DOM, { state } from "./var.js";
 import { renderAlbumCards, renderFavoritesDetailView, renderPlaylistDetailView } from "./ui.js";
 import { updateDiarySongsSelector, renderIntegratedDiaryFeed } from "./reviews.js";
-import { startGame, stopGame } from "./game.js";
+import { startGame, stopGame, updateMiniPlayerStatus } from "./game.js";
 
 export function showSection(section) {
   const previousSection = state.currentSection;
@@ -27,7 +27,13 @@ export function showSection(section) {
   if (DOM.views.profile) DOM.views.profile.classList.add("hidden");
   if (DOM.views.artistProfile) DOM.views.artistProfile.classList.add("hidden");
 
-  if (previousSection === "game" && section !== "game") stopGame();
+  // ✅ Detener juego si se sale de él
+  if (previousSection === "game" && section !== "game") {
+    console.log("🚪 Saliendo del juego...");
+    stopGame();
+    // ✅ IMPORTANTE: Desactivar mensaje de "Juego activo"
+    updateMiniPlayerStatus(false);
+  }
 
   if (section === "home") {
     if (DOM.sidebar.navHome) DOM.sidebar.navHome.classList.add("active");
@@ -48,6 +54,8 @@ export function showSection(section) {
     if (DOM.sidebar.navGame) DOM.sidebar.navGame.classList.add("active");
     if (DOM.views.game) {
       DOM.views.game.classList.remove("hidden");
+      // ✅ Activar mensaje de "Juego activo"
+      updateMiniPlayerStatus(true);
       startGame();
     }
   } else if (section === "profile") {

@@ -1,0 +1,112 @@
+/* ============================================
+   COMPONENTES REUTILIZABLES
+   ============================================ */
+
+/* ----- Auth (login/register) ----- */
+.auth-input-group {
+    margin-bottom: 1rem;
+}
+
+.auth-input-group input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+    border-radius: 40px;
+    color: white;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.auth-input-group input:focus {
+    border-color: var(--blue-accent, #3b82f6);
+}
+
+/* Password wrapper with toggle */
+.auth-input-group .password-wrapper {
+    position: relative;
+}
+
+.auth-input-group .password-wrapper input {
+    padding-right: 44px;
+}
+
+.auth-input-group .toggle-password {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.auth-input-group .toggle-password:hover {
+    color: white;
+}
+
+/* Password requirements */
+.password-requirements {
+    font-size: 0.75rem;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+    margin-top: 6px;
+    padding-left: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+}
+
+.password-requirements .req-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+}
+
+.password-requirements .req-item.met {
+    color: #4ade80;
+}
+
+.password-requirements .req-item .req-icon {
+    font-size: 0.7rem;
+}
+
+/* Auth buttons */
+.auth-btn-primary {
+    width: 100%;
+    padding: 12px;
+    background: var(--blue-accent, #3b82f6);
+    border: none;
+    border-radius: 40px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: white;
+}
+
+.auth-btn-primary:hover {
+    background: var(--blue-hover, #2563eb);
+    transform: translateY(-2px);
+}
+
+/* Auth links */
+.auth-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    color: var(--text-secondary, rgba(255,255,255,0.6));
+}
+
+.auth-link a {
+    color: var(--blue-accent, #3b82f6);
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+}

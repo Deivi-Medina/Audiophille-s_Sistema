@@ -2,8 +2,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// --- CORS: permitir origen exacto del frontend (cambia el puerto si usas otro) ---
-$frontend_origin = 'http://127.0.0.1:5500'; // Ajusta a tu puerto (ej. 5500, 3000, etc.)
+$frontend_origin = 'http://127.0.0.1:5500';
 header('Access-Control-Allow-Origin: ' . $frontend_origin);
 header('Access-Control-Allow-Credentials: true');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -19,7 +18,6 @@ require_once __DIR__ . '/models/Database.php';
 
 session_start();
 
-// --- Leer cuerpo de la petición si $_POST está vacío (para JSON) ---
 if (empty($_POST)) {
     $input = file_get_contents('php://input');
     if ($input) {
@@ -46,7 +44,6 @@ function sendJson($data)
     exit;
 }
 
-// ==================== SWITCH PRINCIPAL ====================
 switch ($action) {
     case 'get_initial_data':
         getInitialData($pdo, $user_id);
@@ -64,7 +61,7 @@ switch ($action) {
         deletePlaylist($pdo, $user_id, $_POST);
         break;
     case 'update_playlist':
-        updatePlaylist($pdo, $user_id, $_POST);
+        updatePlaylist($pdo, $user_id, $_POST, $_FILES);
         break;
     case 'toggle_favorite':
         toggleFavorite($pdo, $user_id, $_POST);
@@ -124,12 +121,9 @@ switch ($action) {
         sendJson(['success' => false, 'message' => 'Acción no soportada: ' . $action]);
 }
 
-// ==================== FUNCIONES ====================
-
 function getInitialData($pdo, $user_id)
 {
     try {
-        // Álbumes del sistema y del usuario
         $stmt = $pdo->prepare("
             SELECT a.id_album, a.titulo, a.anio, a.caratula_url, a.genero,
                    ar.nombre_artista as artista
@@ -160,7 +154,6 @@ function getInitialData($pdo, $user_id)
         $followed_artists = [];
 
         if ($user_id) {
-            // Playlists del usuario
             $stmt = $pdo->prepare("SELECT id_playlist, nombre, portada_url FROM playlists WHERE id_usuario = ?");
             $stmt->execute([$user_id]);
             $playlists = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -180,12 +173,10 @@ function getInitialData($pdo, $user_id)
                 $pl['canciones'] = $stmt2->fetchAll(PDO::FETCH_ASSOC);
             }
 
-            // Favoritos
             $stmt = $pdo->prepare("SELECT id_cancion FROM favoritos WHERE id_usuario = ?");
             $stmt->execute([$user_id]);
             $favoritos = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-            // Reseñas
             $stmt = $pdo->prepare("
                 SELECT r.id_review, r.puntuacion, r.comentario, r.fecha, r.escuchada_nuevamente,
                        r.titulo_cancion_texto, r.artista_texto,
@@ -199,12 +190,10 @@ function getInitialData($pdo, $user_id)
             $stmt->execute([$user_id]);
             $reseñas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // EQ
             $stmt = $pdo->prepare("SELECT bass, vocals, treble FROM configuracion_eq WHERE id_usuario = ?");
             $stmt->execute([$user_id]);
             $eq = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Canciones importadas
             $stmt = $pdo->prepare("
                 SELECT id_cancion, titulo, archivo_url, duracion_segundos, genero
                 FROM canciones
@@ -213,7 +202,6 @@ function getInitialData($pdo, $user_id)
             $stmt->execute([$user_id]);
             $importadas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Artistas seguidos
             $stmt = $pdo->prepare("SELECT nombre_artista FROM artistas_seguidos WHERE id_usuario = ?");
             $stmt->execute([$user_id]);
             $followed_artists = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -307,11 +295,11 @@ function deletePlaylist($pdo, $user_id, $data)
     sendJson(['success' => true]);
 }
 
-function updatePlaylist($pdo, $user_id, $data)
+function updatePlaylist($pdo, $user_id, $data, $files)
 {
     $id_playlist = $data['id_playlist'] ?? 0;
     $nombre = trim($data['nombre'] ?? '');
-    $portada = $data['portada'] ?? '';
+    $portada_url = $data['portada_url'] ?? '';
     $canciones = isset($data['canciones']) ? json_decode($data['canciones'], true) : [];
 
     if (!$id_playlist || !$nombre) sendJson(['success' => false, 'message' => 'ID y nombre requeridos']);
@@ -319,22 +307,38 @@ function updatePlaylist($pdo, $user_id, $data)
     $stmt->execute([$id_playlist]);
     if ($stmt->fetchColumn() != $user_id) sendJson(['success' => false, 'message' => 'No autorizado']);
 
+    if (isset($files['cover_file']) && $files['cover_file']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = __DIR__ . '/uploads/playlists/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+        $ext = pathinfo($files['cover_file']['name'], PATHINFO_EXTENSION);
+        $filename = 'playlist_' . time() . '_' . uniqid() . '.' . $ext;
+        if (move_uploaded_file($files['cover_file']['tmp_name'], $uploadDir . $filename)) {
+            $portada_url = 'uploads/playlists/' . $filename;
+        } else {
+            sendJson(['success' => false, 'message' => 'Error al guardar la imagen']);
+            return;
+        }
+    }
+
     $sql = "UPDATE playlists SET nombre = ?";
     $params = [$nombre];
-    if (!empty($portada)) {
+    if (!empty($portada_url)) {
         $sql .= ", portada_url = ?";
-        $params[] = $portada;
+        $params[] = $portada_url;
     }
-    $sql .= " WHERE id_playlist = ?";
+    $sql .= " WHERE id_playlist = ? AND id_usuario = ?";
     $params[] = $id_playlist;
+    $params[] = $user_id;
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
 
     $stmt = $pdo->prepare("DELETE FROM playlist_canciones WHERE id_playlist = ?");
     $stmt->execute([$id_playlist]);
     foreach ($canciones as $idx => $id_cancion) {
-        $stmt = $pdo->prepare("INSERT INTO playlist_canciones (id_playlist, id_cancion, orden) VALUES (?, ?, ?)");
-        $stmt->execute([$id_playlist, $id_cancion, $idx]);
+        if ($id_cancion) {
+            $stmt = $pdo->prepare("INSERT INTO playlist_canciones (id_playlist, id_cancion, orden) VALUES (?, ?, ?)");
+            $stmt->execute([$id_playlist, $id_cancion, $idx]);
+        }
     }
     sendJson(['success' => true]);
 }
@@ -537,7 +541,6 @@ function createAlbum($pdo, $user_id, $data, $files)
             sendJson(['success' => false, 'message' => 'Título y artista son requeridos']);
         }
 
-        // Obtener o crear artista
         $stmt = $pdo->prepare("SELECT id_artista FROM artistas WHERE nombre_artista = ?");
         $stmt->execute([$artista]);
         $idArtista = $stmt->fetchColumn();
@@ -547,7 +550,6 @@ function createAlbum($pdo, $user_id, $data, $files)
             $idArtista = $pdo->lastInsertId();
         }
 
-        // Manejar portada
         if ($coverFile && $coverFile['error'] === UPLOAD_ERR_OK) {
             $uploadDir = __DIR__ . '/uploads/covers/';
             if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
@@ -563,12 +565,10 @@ function createAlbum($pdo, $user_id, $data, $files)
             $coverUrl = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400';
         }
 
-        // Insertar álbum (es_sistema = 0, id_usuario = creador)
         $stmt = $pdo->prepare("INSERT INTO albumes (titulo, id_artista, caratula_url, genero, anio, es_sistema, id_usuario) VALUES (?, ?, ?, ?, ?, 0, ?)");
         $stmt->execute([$titulo, $idArtista, $coverUrl, $data['genero'] ?? null, $data['anio'] ?? null, $user_id]);
         $idAlbum = $pdo->lastInsertId();
 
-        // Insertar canciones
         $cancionesCount = intval($data['songs_count'] ?? 0);
         for ($i = 0; $i < $cancionesCount; $i++) {
             $songTitle = $data["song_{$i}_title"] ?? '';
@@ -597,17 +597,22 @@ function updateAlbum($pdo, $user_id, $data, $files)
 {
     $idAlbum = $data['id_album'] ?? 0;
     if (!$idAlbum) sendJson(['success' => false, 'message' => 'ID de álbum requerido']);
+
     $stmt = $pdo->prepare("SELECT es_sistema FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
-    $esSistema = $stmt->fetchColumn();
-    if ($esSistema) sendJson(['success' => false, 'message' => 'No se pueden editar álbumes del sistema']);
+    if ($stmt->fetchColumn()) {
+        sendJson(['success' => false, 'message' => 'No se pueden editar álbumes del sistema']);
+    }
+
     $titulo = trim($data['titulo'] ?? '');
     $artista = trim($data['artista'] ?? '');
-    $coverUrl = $data['caratula'] ?? '';
+    $caratula = $data['caratula'] ?? '';
+
     if ($titulo) {
         $stmt = $pdo->prepare("UPDATE albumes SET titulo = ? WHERE id_album = ?");
         $stmt->execute([$titulo, $idAlbum]);
     }
+
     if ($artista) {
         $stmt = $pdo->prepare("SELECT id_artista FROM artistas WHERE nombre_artista = ?");
         $stmt->execute([$artista]);
@@ -620,10 +625,25 @@ function updateAlbum($pdo, $user_id, $data, $files)
         $stmt = $pdo->prepare("UPDATE albumes SET id_artista = ? WHERE id_album = ?");
         $stmt->execute([$idArtista, $idAlbum]);
     }
-    if ($coverUrl) {
-        $stmt = $pdo->prepare("UPDATE albumes SET caratula_url = ? WHERE id_album = ?");
-        $stmt->execute([$coverUrl, $idAlbum]);
+
+    if (isset($files['cover_file']) && $files['cover_file']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = __DIR__ . '/uploads/covers/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+        $ext = pathinfo($files['cover_file']['name'], PATHINFO_EXTENSION);
+        $filename = 'album_' . time() . '_' . uniqid() . '.' . $ext;
+        if (move_uploaded_file($files['cover_file']['tmp_name'], $uploadDir . $filename)) {
+            $caratula = 'uploads/covers/' . $filename;
+        } else {
+            sendJson(['success' => false, 'message' => 'Error al guardar la portada']);
+            return;
+        }
     }
+
+    if ($caratula) {
+        $stmt = $pdo->prepare("UPDATE albumes SET caratula_url = ? WHERE id_album = ?");
+        $stmt->execute([$caratula, $idAlbum]);
+    }
+
     if (isset($data['canciones'])) {
         $canciones = json_decode($data['canciones'], true);
         if (is_array($canciones)) {
@@ -638,6 +658,7 @@ function updateAlbum($pdo, $user_id, $data, $files)
             }
         }
     }
+
     sendJson(['success' => true]);
 }
 
@@ -647,8 +668,9 @@ function deleteAlbum($pdo, $user_id, $data)
     if (!$idAlbum) sendJson(['success' => false, 'message' => 'ID de álbum requerido']);
     $stmt = $pdo->prepare("SELECT es_sistema FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
-    $esSistema = $stmt->fetchColumn();
-    if ($esSistema) sendJson(['success' => false, 'message' => 'No se pueden eliminar álbumes del sistema']);
+    if ($stmt->fetchColumn()) {
+        sendJson(['success' => false, 'message' => 'No se pueden eliminar álbumes del sistema']);
+    }
     $stmt = $pdo->prepare("DELETE FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
     sendJson(['success' => true]);

@@ -2,10 +2,33 @@
 import { togglePlayPause, playNextTrack, playPrevTrack, toggleShuffle, toggleRepeat, toggleFavoriteStatus, audio } from "./audio.js";
 import DOM from "./var.js";
 
+// ✅ Variable para saber si el juego está activo
+let isGameActive = false;
+
+// ✅ Función para activar/desactivar el modo juego
+export function setGameKeyboardMode(active) {
+  isGameActive = active;
+  console.log(`🎮 Modo teclado del juego: ${active ? "ACTIVO" : "INACTIVO"}`);
+}
+
 export function initKeyboardControls() {
   window.addEventListener("keydown", (e) => {
+    // ✅ Si el juego está activo, bloquear TODOS los atajos
+    if (isGameActive) {
+      // Solo permitir teclas específicas del juego (si las hay)
+      const gameKeys = ["Enter", " ", "ArrowLeft", "ArrowRight"];
+      if (gameKeys.includes(e.key)) {
+        // Permitir estas teclas para el juego (opcional)
+        return;
+      }
+      // Bloquear el resto
+      e.preventDefault();
+      return;
+    }
+
     const activeTag = document.activeElement?.tagName;
     if (activeTag === "INPUT" || activeTag === "TEXTAREA" || document.activeElement?.id === "musikInput") return;
+
     const preventKeys = [" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "s", "S", "r", "R", "f", "F"];
     if (preventKeys.includes(e.key)) e.preventDefault();
 

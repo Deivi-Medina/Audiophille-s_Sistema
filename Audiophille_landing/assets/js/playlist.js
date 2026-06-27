@@ -5,6 +5,8 @@ import { renderAlbumCards } from "./ui.js";
 import { setQueue, playActiveSong } from "./audio.js";
 import { showAlert, showConfirm } from "./modals.js";
 
+window.tempCoverFile = null;
+
 async function refreshUI() {
   await loadInitialData();
   renderPlaylistsSidebarLinks();
@@ -71,7 +73,7 @@ export async function createPlaylistAction() {
     const response = await fetch(`${window.baseUrl}api.php`, {
       method: "POST",
       body: formData,
-      credentials: "include", // ← Cambiado de same-origin a include
+      credentials: "include",
     });
     const data = await response.json();
     if (data.success) {
@@ -91,16 +93,25 @@ export function openEditPlaylistModal() {
   if (!playlistName) return;
   const playlist = state.playlists[playlistName];
   if (!playlist) return;
+
+  window.tempCoverFile = null;
+  const preview = document.getElementById("editCoverPreview");
+  if (preview) {
+    preview.src = "";
+    preview.style.display = "none";
+  }
+
   if (DOM.editAlbumModal.headerTitle) DOM.editAlbumModal.headerTitle.innerText = "Editar Playlist";
   if (DOM.editAlbumModal.lblTitle) DOM.editAlbumModal.lblTitle.innerText = "Nombre de la Playlist";
   if (DOM.editAlbumModal.artistGroup) DOM.editAlbumModal.artistGroup.style.display = "none";
   if (DOM.editAlbumModal.inputTitle) DOM.editAlbumModal.inputTitle.value = playlistName;
   if (DOM.editAlbumModal.inputCover) DOM.editAlbumModal.inputCover.value = playlist.portada;
+
   window.editAlbumTempSongs = playlist.canciones.map((s) => ({ ...s }));
   if (DOM.editAlbumModal.modal) DOM.editAlbumModal.modal.classList.remove("hidden");
 }
 
-export async function confirmEditPlaylistChanges(oldName, nextName, nextCover, tempSongs) {
+export async function confirmEditPlaylistChanges(oldName, nextName, nextCover, tempSongs, coverFile = null) {
   const playlist = state.playlists[oldName];
   if (!playlist) return;
   const playlistId = playlist.id_playlist;
@@ -108,11 +119,18 @@ export async function confirmEditPlaylistChanges(oldName, nextName, nextCover, t
     await showAlert("Error: playlist sin ID", "Error");
     return;
   }
+
   const formData = new FormData();
   formData.append("action", "update_playlist");
   formData.append("id_playlist", playlistId);
   formData.append("nombre", nextName);
-  if (nextCover) formData.append("portada", nextCover);
+
+  if (coverFile) {
+    formData.append("cover_file", coverFile);
+  } else if (nextCover) {
+    formData.append("portada_url", nextCover);
+  }
+
   const songIds = tempSongs.map((s) => s.id_cancion).filter((id) => id);
   formData.append("canciones", JSON.stringify(songIds));
 
@@ -127,6 +145,12 @@ export async function confirmEditPlaylistChanges(oldName, nextName, nextCover, t
       await refreshUI();
       showSection(`playlist:${nextName}`);
       if (DOM.editAlbumModal.modal) DOM.editAlbumModal.modal.classList.add("hidden");
+      window.tempCoverFile = null;
+      const preview = document.getElementById("editCoverPreview");
+      if (preview) {
+        preview.src = "";
+        preview.style.display = "none";
+      }
     } else {
       await showAlert(data.message || "Error al actualizar playlist", "Error");
     }

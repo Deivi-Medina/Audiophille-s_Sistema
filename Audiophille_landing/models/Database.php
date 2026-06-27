@@ -255,7 +255,7 @@ class Database
             // Insertar álbumes
             $albums = [
                 ['A Hard Day\'s Night', $artists['The Beatles'], 1964, 'https://i.ytimg.com/vi/5en2JMLA8Z0/maxresdefault.jpg', 'Rock \'n\' Roll'],
-                ['The Dark Side of the Moon', $artists['Pink Floyd'], 1973, 'https://upload.wikimedia.org/wikipedia/en/3/3b/Dark_Side_of_the_Moon.png', 'Progressive Rock'],
+                ['The Dark Side of the Moon', $artists['Pink Floyd'], 1973, 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSpKDuWTcpap2UJCkmnVBhDJwuh2y3aD-6iPrS6nohjKOUaivKLf7mB9zU&s=10', 'Progressive Rock'],
                 ['Teselia', $artists['suei'], 2020, 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSshQdcG--1OpDBbvgkGDbICgjP2pIeMGhQ7g&s', 'Soundtrack / VGM'],
                 ['Thriller', $artists['Michael Jackson'], 1982, 'https://upload.wikimedia.org/wikipedia/en/5/55/Michael_Jackson_-_Thriller.png', 'Pop / R&B']
             ];
