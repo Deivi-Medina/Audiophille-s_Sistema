@@ -4,17 +4,12 @@ import { renderAlbumCards, openAlbumView } from "./ui.js";
 import { showSection } from "./navigation.js";
 import { openEditPlaylistModal, deleteActivePlaylist } from "./playlist.js";
 import { showAlert, showConfirm } from "./modals.js";
-import { post } from "./api.js"; //
+import { post } from "./api.js";
 import { addXpForAction } from "./achievements.js";
-// ============================================================
-// ESTADO LOCAL
-// ============================================================
+
 let editAlbumTempSongs = [];
 let tempCoverFile = null;
 
-// ============================================================
-// FUNCIONES AUXILIARES (UI y estado)
-// ============================================================
 function getAlbums() {
   return window.albumsFromDB || [];
 }
@@ -32,9 +27,6 @@ async function refreshDataAndUI() {
   }
 }
 
-// ============================================================
-// LISTENER PARA SUBIDA DE IMAGEN (SOLO UI)
-// ============================================================
 if (DOM.editAlbumModal?.coverFileInput) {
   DOM.editAlbumModal.coverFileInput.addEventListener("change", function () {
     const file = this.files[0];
@@ -60,9 +52,6 @@ if (DOM.editAlbumModal?.coverFileInput) {
   });
 }
 
-// ============================================================
-// FUNCIONES DE NEGOCIO (LLAMADAS A LA API)
-// ============================================================
 async function updatePlaylist(playlistId, nombre, coverFile, coverUrl, songIds) {
   const formData = new FormData();
   formData.append("action", "update_playlist");
@@ -77,7 +66,6 @@ async function updatePlaylist(playlistId, nombre, coverFile, coverUrl, songIds) 
 
   formData.append("canciones", JSON.stringify(songIds));
 
-  // Usamos el servicio centralizado con FormData
   return post("update_playlist", formData);
 }
 
@@ -103,9 +91,6 @@ async function deleteAlbum(albumId) {
   return post("delete_album", { id_album: albumId });
 }
 
-// ============================================================
-// EXPORTACIONES (UI)
-// ============================================================
 export async function openEditAlbumModal() {
   if (state.activePlaylistName) {
     openEditPlaylistModal();
@@ -198,11 +183,7 @@ export function handleEditAlbumAddLocalSong(file) {
   renderEditAlbumSongsList();
 }
 
-// ============================================================
-// CONFIRMAR CAMBIOS (USANDO LAS FUNCIONES DE NEGOCIO)
-// ============================================================
 export async function confirmEditAlbumChanges() {
-  // ---- CASO PLAYLIST ----
   if (state.activePlaylistName) {
     const oldName = state.activePlaylistName;
     const nextName = DOM.editAlbumModal.inputTitle?.value.trim();
@@ -237,12 +218,11 @@ export async function confirmEditAlbumChanges() {
       }
     } catch (error) {
       console.error(error);
-      await showAlert("Error de conexión", "Error");
+      await showAlert(error.message || "Error de conexión", "Error");
     }
     return;
   }
 
-  // ---- CASO ÁLBUM ----
   const albumIndex = state.activeAlbumIndex;
   if (albumIndex === null) return;
   const albums = getAlbums();
@@ -284,13 +264,10 @@ export async function confirmEditAlbumChanges() {
     }
   } catch (error) {
     console.error(error);
-    await showAlert("Error de conexión", "Error");
+    await showAlert(error.message || "Error de conexión", "Error");
   }
 }
 
-// ============================================================
-// ELIMINAR ÁLBUM
-// ============================================================
 export async function deleteActiveAlbum() {
   if (state.activePlaylistName) {
     await deleteActivePlaylist();
@@ -316,8 +293,7 @@ export async function deleteActiveAlbum() {
         await showAlert(data.message || "Error al eliminar", "Error");
       }
     } catch (error) {
-      console.error(error);
-      await showAlert("Error de conexión", "Error");
+      await showAlert(error.message || "Error de conexión", "Error");
     }
   }
 }

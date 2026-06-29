@@ -2,7 +2,8 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$frontend_origin = 'http://127.0.0.1:5500';
+// 🔧 CORREGIDO: CORS más flexible para entornos de desarrollo
+$frontend_origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
 header('Access-Control-Allow-Origin: ' . $frontend_origin);
 header('Access-Control-Allow-Credentials: true');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -170,7 +171,7 @@ switch ($action) {
 }
 
 // ============================================================
-// FUNCIONES EXISTENTES
+// FUNCIONES EXISTENTES (solo se han corregido las indicadas)
 // ============================================================
 
 function getInitialData($pdo, $user_id)
@@ -316,10 +317,22 @@ function addToPlaylist($pdo, $user_id, $data)
     sendJson(['success' => true]);
 }
 
+// 🔧 CORREGIDO: Ahora verifica que la playlist pertenezca al usuario
 function removeFromPlaylist($pdo, $user_id, $data)
 {
     $id_playlist = $data['id_playlist'] ?? 0;
     $id_cancion = $data['id_cancion'] ?? 0;
+    if (!$id_playlist || !$id_cancion) {
+        sendJson(['success' => false, 'message' => 'Datos incompletos']);
+        return;
+    }
+    // Verificar propiedad
+    $stmt = $pdo->prepare("SELECT id_usuario FROM playlists WHERE id_playlist = ?");
+    $stmt->execute([$id_playlist]);
+    if ($stmt->fetchColumn() != $user_id) {
+        sendJson(['success' => false, 'message' => 'No autorizado']);
+        return;
+    }
     $stmt = $pdo->prepare("DELETE FROM playlist_canciones WHERE id_playlist = ? AND id_cancion = ?");
     $stmt->execute([$id_playlist, $id_cancion]);
     sendJson(['success' => true]);
@@ -682,15 +695,27 @@ function createAlbum($pdo, $user_id, $data, $files)
     }
 }
 
+// 🔧 CORREGIDO: Ahora verifica que el álbum pertenezca al usuario (si no es sistema)
 function updateAlbum($pdo, $user_id, $data, $files)
 {
     $idAlbum = $data['id_album'] ?? 0;
     if (!$idAlbum) sendJson(['success' => false, 'message' => 'ID de álbum requerido']);
 
-    $stmt = $pdo->prepare("SELECT es_sistema FROM albumes WHERE id_album = ?");
+    // Verificar propiedad y estado del sistema
+    $stmt = $pdo->prepare("SELECT es_sistema, id_usuario FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
-    if ($stmt->fetchColumn()) {
+    $album = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$album) {
+        sendJson(['success' => false, 'message' => 'Álbum no encontrado']);
+        return;
+    }
+    if ($album['es_sistema'] == 1) {
         sendJson(['success' => false, 'message' => 'No se pueden editar álbumes del sistema']);
+        return;
+    }
+    if ($album['id_usuario'] != $user_id) {
+        sendJson(['success' => false, 'message' => 'No autorizado para editar este álbum']);
+        return;
     }
 
     $titulo = trim($data['titulo'] ?? '');
@@ -751,15 +776,29 @@ function updateAlbum($pdo, $user_id, $data, $files)
     sendJson(['success' => true]);
 }
 
+// 🔧 CORREGIDO: Ahora verifica que el álbum pertenezca al usuario (si no es sistema)
 function deleteAlbum($pdo, $user_id, $data)
 {
     $idAlbum = $data['id_album'] ?? 0;
     if (!$idAlbum) sendJson(['success' => false, 'message' => 'ID de álbum requerido']);
-    $stmt = $pdo->prepare("SELECT es_sistema FROM albumes WHERE id_album = ?");
+
+    // Verificar propiedad y estado del sistema
+    $stmt = $pdo->prepare("SELECT es_sistema, id_usuario FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
-    if ($stmt->fetchColumn()) {
-        sendJson(['success' => false, 'message' => 'No se pueden eliminar álbumes del sistema']);
+    $album = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$album) {
+        sendJson(['success' => false, 'message' => 'Álbum no encontrado']);
+        return;
     }
+    if ($album['es_sistema'] == 1) {
+        sendJson(['success' => false, 'message' => 'No se pueden eliminar álbumes del sistema']);
+        return;
+    }
+    if ($album['id_usuario'] != $user_id) {
+        sendJson(['success' => false, 'message' => 'No autorizado para eliminar este álbum']);
+        return;
+    }
+
     $stmt = $pdo->prepare("DELETE FROM albumes WHERE id_album = ?");
     $stmt->execute([$idAlbum]);
     sendJson(['success' => true]);
@@ -866,7 +905,7 @@ function getUserStats($pdo, $user_id)
 }
 
 // ============================================================
-// FUNCIONES SOCIALES
+// FUNCIONES SOCIALES (sin cambios)
 // ============================================================
 
 function getPublicProfile($pdo, $current_user_id, $data)
@@ -1209,7 +1248,7 @@ function addPlaylistToLibrary($pdo, $user_id, $data)
 }
 
 // ============================================================
-// FUNCIÓN MERGE PLAYLISTS 
+// FUNCIÓN MERGE PLAYLISTS (sin cambios)
 // ============================================================
 
 function mergePlaylists($pdo, $user_id, $data)
