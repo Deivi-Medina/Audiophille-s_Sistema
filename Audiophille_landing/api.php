@@ -166,6 +166,10 @@ switch ($action) {
     case 'unlock_achievement':
         unlockAchievement($pdo, $user_id, $_POST);
         break;
+    case 'incrementar_partida':
+        incrementarPartida($pdo, $user_id);
+        break;
+
     default:
         sendJson(['success' => false, 'message' => 'Acción no soportada: ' . $action]);
 }
@@ -567,6 +571,7 @@ function registerPlay($pdo, $user_id, $data)
 {
     $artistName = trim($data['nombre_artista'] ?? '');
     $idArtista = $data['id_artista'] ?? 0;
+
     if ($idArtista) {
         $stmt = $pdo->prepare("INSERT INTO reproducciones_artista (id_usuario, id_artista, fecha) VALUES (?, ?, NOW())");
         $stmt->execute([$user_id, $idArtista]);
@@ -575,10 +580,15 @@ function registerPlay($pdo, $user_id, $data)
         $stmt->execute([$user_id, $artistName]);
     } else {
         sendJson(['success' => false, 'message' => 'No se especificó artista']);
+        return;
     }
-    sendJson(['success' => true]);
-}
 
+    // Obtener estadísticas y verificar logros
+    $stats = getUserStatsArray($pdo, $user_id);
+    $unlocked = checkAndUnlockAchievements($pdo, $user_id, $stats);
+
+    sendJson(['success' => true, 'unlocked' => $unlocked]);
+}
 function getTopArtist($pdo, $user_id)
 {
     try {
@@ -1831,6 +1841,10 @@ function getUserStatsArray($pdo, $user_id)
     $stmt->execute([$user_id]);
     $correctGuesses = $stmt->fetchColumn() ? 10 : 0;
 
+    $stmt = $pdo->prepare("SELECT partidas_jugadas FROM progreso_usuario WHERE id_usuario = ?");
+    $stmt->execute([$user_id]);
+    $partidas = $stmt->fetchColumn() ?: 0;
+
     return [
         'songs' => (int)$songs,
         'reviews' => (int)$reviews,
@@ -1839,7 +1853,8 @@ function getUserStatsArray($pdo, $user_id)
         'albums' => (int)$albums,
         'plays' => (int)$plays,
         'games' => (int)$games,
-        'correct_guesses' => (int)$correctGuesses
+        'correct_guesses' => (int)$correctGuesses,
+        'partidas_jugadas' => (int)$partidas
     ];
 }
 
@@ -1889,6 +1904,9 @@ function checkAndUnlockAchievements($pdo, $user_id, $stats)
             case 'correct_guesses':
                 $conditionMet = $stats['correct_guesses'] >= $amount;
                 break;
+            case 'partidas_jugadas':
+                $conditionMet = $stats['partidas_jugadas'] >= $amount;
+                break;
             default:
                 $conditionMet = false;
         }
@@ -1915,4 +1933,16 @@ function checkAndUnlockAchievements($pdo, $user_id, $stats)
     }
 
     return $unlocked;
+}
+
+function incrementarPartida($pdo, $user_id)
+{
+    $stmt = $pdo->prepare("UPDATE progreso_usuario SET partidas_jugadas = partidas_jugadas + 1 WHERE id_usuario = ?");
+    $stmt->execute([$user_id]);
+
+    // Verificar logros después de incrementar
+    $stats = getUserStatsArray($pdo, $user_id);
+    $unlocked = checkAndUnlockAchievements($pdo, $user_id, $stats);
+
+    sendJson(['success' => true, 'unlocked' => $unlocked]);
 }

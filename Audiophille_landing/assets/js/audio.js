@@ -4,6 +4,8 @@ import { renderReviews } from "./reviews.js";
 import { renderQueueSidebarList, renderTrackActiveStylings, updatePlayingUIs } from "./ui.js";
 import { toggleFavorite } from "./services/favoriteService.js";
 import { registerPlay } from "./services/playStatsService.js";
+import { notifyAchievementUnlock, loadAchievements } from "./achievements.js";
+import { getAchievements } from "./services/achievementService.js";
 
 // ============================================================
 // ELEMENTO DE AUDIO ÚNICO
@@ -146,15 +148,17 @@ export function playPrevTrack() {
 // ============================================================
 export function toggleShuffle() {
   isShuffleActive = !isShuffleActive;
-  if (DOM.audioControls.btnShuffle) {
-    DOM.audioControls.btnShuffle.classList.toggle("active-control", isShuffleActive);
+  const btn = document.getElementById("btnShuffle");
+  if (btn) {
+    btn.classList.toggle("active-control", isShuffleActive);
   }
 }
 
 export function toggleRepeat() {
   isRepeatActive = !isRepeatActive;
-  if (DOM.audioControls.btnRepeat) {
-    DOM.audioControls.btnRepeat.classList.toggle("active-control", isRepeatActive);
+  const btn = document.getElementById("btnRepeat");
+  if (btn) {
+    btn.classList.toggle("active-control", isRepeatActive);
   }
 }
 
@@ -183,7 +187,7 @@ export async function toggleFavoriteStatus() {
 // ============================================================
 // EVENTOS DEL AUDIO (timeupdate, ended)
 // ============================================================
-function onAudioTimeUpdate() {
+async function onAudioTimeUpdate() {
   if (!audio.duration) return;
   const progressPercent = (audio.currentTime / audio.duration) * 100;
 
@@ -203,8 +207,19 @@ function onAudioTimeUpdate() {
     DOM.audioControls.timeTotal.innerText = formatTimerString(audio.duration);
   }
 
+  // Registrar reproducción y verificar logros
   if (progressPercent >= 70 && !pistaContabilizada && queue.length > 0) {
-    registerPlay(queue[queueIndex]);
+    const result = await registerPlay(queue[queueIndex]);
+    if (result && result.unlocked && result.unlocked.length > 0) {
+      await loadAchievements(); // recarga la lista en memoria
+      const data = await getAchievements();
+      if (data.success) {
+        const unlockedAchievements = data.achievements.filter((a) => result.unlocked.includes(a.id_logro));
+        unlockedAchievements.forEach((ach) => {
+          notifyAchievementUnlock(ach);
+        });
+      }
+    }
     pistaContabilizada = true;
   }
 }
@@ -318,5 +333,31 @@ if (volSlider) {
   audio.volume = initialVal / 100;
   if (lblMasterVol) {
     lblMasterVol.textContent = initialVal + "%";
+  }
+}
+
+/**
+ * Reordena la cola de reproducción
+ * @param {number} fromIndex - Índice de origen
+ * @param {number} toIndex - Índice de destino
+ */
+export function reorderQueue(fromIndex, toIndex) {
+  if (fromIndex === toIndex) return;
+
+  // Extraer el elemento de la posición origen
+  const [removed] = queue.splice(fromIndex, 1);
+  // Insertarlo en la posición destino
+  queue.splice(toIndex, 0, removed);
+
+  // Ajustar queueIndex si la canción actual se movió
+  if (queueIndex === fromIndex) {
+    // Si la canción actual es la que se movió, su nuevo índice es toIndex
+    queueIndex = toIndex;
+  } else if (fromIndex < queueIndex && toIndex >= queueIndex) {
+    // Si la canción actual está entre origen y destino, y el origen estaba antes que el actual
+    queueIndex--;
+  } else if (fromIndex > queueIndex && toIndex <= queueIndex) {
+    // Si la canción actual está entre destino y origen, y el origen estaba después del actual
+    queueIndex++;
   }
 }

@@ -3,6 +3,9 @@ import { audio, isPlaying, queue, queueIndex, playActiveSong, setQueue } from ".
 import { state } from "./var.js";
 import { setGameKeyboardMode } from "./keyboard.js";
 import { addXpForAction } from "./achievements.js";
+import { incrementarPartida } from "./services/gameService.js";
+import { notifyAchievementUnlock, loadAchievements } from "./achievements.js";
+import { getAchievements } from "./services/achievementService.js";
 
 // ==================== ESTADO DEL JUEGO ====================
 let currentGameSong = null;
@@ -23,6 +26,19 @@ let wasPlayingBeforeGame = false;
 // ==================== DOM ELEMENTS ====================
 let gameCover, gameScore, gameOptionsContainer, gameNextBtn, gameMessage, gamePlayingIndicator;
 let currentPlayPromise = null;
+
+async function handleUnlockedAchievements(result) {
+  if (result && result.unlocked && result.unlocked.length > 0) {
+    await loadAchievements();
+    const data = await getAchievements();
+    if (data.success) {
+      const unlockedAchievements = data.achievements.filter((a) => result.unlocked.includes(a.id_logro));
+      unlockedAchievements.forEach((ach) => {
+        notifyAchievementUnlock(ach);
+      });
+    }
+  }
+}
 
 // ==================== INICIALIZACIÓN ====================
 export function initGameDOM() {
@@ -114,6 +130,10 @@ export function stopGame() {
   currentOptions = [];
   currentCorrectAnswer = "";
   currentRoundActive = true;
+
+  incrementarPartida()
+    .then((result) => handleUnlockedAchievements(result))
+    .catch((err) => console.warn("Error al incrementar partida:", err));
 }
 
 function restoreMainMusic() {

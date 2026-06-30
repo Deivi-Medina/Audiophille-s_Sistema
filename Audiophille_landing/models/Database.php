@@ -271,6 +271,7 @@ class Database
             `id_usuario` int PRIMARY KEY,
             `xp_total` int DEFAULT 0,
             `nivel_actual` int DEFAULT 1,
+            `partidas_jugadas` int DEFAULT 0,
             CONSTRAINT `progreso_usuario_ibfk_1` FOREIGN KEY (`id_usuario`) REFERENCES `usuarios` (`id_usuario`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci";
 

@@ -466,3 +466,21 @@
         max-width: 200px;
     }
 }
+
+/* Estilo cuando se arrastra un elemento */
+.queue-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+/* Estilo cuando se arrastra sobre otro */
+.queue-item.drag-over {
+  border: 2px dashed var(--accent);
+  background: var(--accent-dim);
+  transform: scale(1.02);
+}
+
+/* Transición suave para todos los items */
+.queue-item {
+  transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease, border 0.2s ease;
+}

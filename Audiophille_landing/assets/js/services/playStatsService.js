@@ -1,5 +1,5 @@
+// assets/js/services/playStatsService.js
 import { post } from "../api.js";
-
 export async function registerPlay(track) {
   if (!track) return;
   const artistName = track.artistName || "Artista Desconocido";
@@ -10,8 +10,10 @@ export async function registerPlay(track) {
     payload.id_artista = track.id_artista;
   }
   try {
-    await post("register_play", payload);
+    const data = await post("register_play", payload);
+    return data; // <--- esto es lo nuevo
   } catch (error) {
     console.warn("Error al registrar reproducción:", error);
+    return null;
   }
 }

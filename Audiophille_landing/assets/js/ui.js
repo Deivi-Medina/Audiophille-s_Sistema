@@ -1,6 +1,6 @@
 // js/ui.js
 import DOM, { state, preloadDurations, loadInitialData } from "./var.js";
-import { queue, queueIndex, playActiveSong, setQueue } from "./audio.js";
+import { queue, queueIndex, playActiveSong, setQueue, reorderQueue } from "./audio.js";
 import { renderReviews } from "./reviews.js";
 import { showSection } from "./navigation.js";
 import { showAlert } from "./modals.js";
@@ -8,6 +8,8 @@ import { openArtistProfile } from "./artists.js";
 import { addSongToPlaylist } from "./services/playlistService.js";
 
 let contextMenuSong = null;
+let draggedIndex = null;
+let dragOverIndex = null;
 
 function getAlbums() {
   return window.albumsFromDB || [];
@@ -259,17 +261,82 @@ function playNewAlbumQueue(albumIdx, songIdx) {
 
 export function renderQueueSidebarList() {
   if (!DOM.queue.dynamicList) return;
-  DOM.queue.dynamicList.innerHTML = "";
+  const container = DOM.queue.dynamicList;
+  container.innerHTML = "";
+
   queue.forEach((song, idx) => {
     const item = document.createElement("div");
     item.className = `queue-item ${idx === queueIndex ? "queue-active" : ""}`;
-    item.innerHTML = `<div class="queue-title">${escapeHtml(song.trackTitle)}</div><div class="queue-artist">${escapeHtml(song.artistName)}</div>`;
+    item.draggable = true;
+    item.dataset.index = idx;
+
+    item.innerHTML = `
+      <div class="queue-title">${escapeHtml(song.trackTitle)}</div>
+      <div class="queue-artist">${escapeHtml(song.artistName)}</div>
+    `;
+
+    // Eventos de drag & drop
+    item.addEventListener("dragstart", handleDragStart);
+    item.addEventListener("dragenter", handleDragEnter);
+    item.addEventListener("dragover", handleDragOver);
+    item.addEventListener("drop", handleDrop);
+    item.addEventListener("dragend", handleDragEnd);
+
+    // Click para reproducir
     item.addEventListener("click", () => {
       setQueue(queue, idx);
       playActiveSong();
     });
-    DOM.queue.dynamicList.appendChild(item);
+
+    container.appendChild(item);
   });
+}
+
+// ==================== MANEJADORES DE DRAG & DROP ====================
+
+function handleDragStart(e) {
+  draggedIndex = parseInt(this.dataset.index);
+  this.style.opacity = "0.5";
+  e.dataTransfer.effectAllowed = "move";
+  // Opcional: guardar el índice en dataTransfer para mayor robustez
+  e.dataTransfer.setData("text/plain", String(draggedIndex));
+}
+
+function handleDragEnter(e) {
+  e.preventDefault();
+  this.classList.add("drag-over");
+}
+
+function handleDragOver(e) {
+  e.preventDefault(); // Necesario para permitir drop
+  e.dataTransfer.dropEffect = "move";
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  this.classList.remove("drag-over");
+
+  const targetIndex = parseInt(this.dataset.index);
+  // Usar draggedIndex (variable global) o el valor de dataTransfer
+  const fromIndex = draggedIndex !== null ? draggedIndex : parseInt(e.dataTransfer.getData("text/plain"));
+
+  if (fromIndex !== null && targetIndex !== null && fromIndex !== targetIndex) {
+    // Reordenar la cola
+    reorderQueue(fromIndex, targetIndex);
+    // Refrescar la vista
+    renderQueueSidebarList();
+  }
+
+  // Limpiar estado
+  draggedIndex = null;
+  dragOverIndex = null;
+}
+
+function handleDragEnd(e) {
+  this.style.opacity = "1";
+  document.querySelectorAll(".queue-item").forEach((el) => el.classList.remove("drag-over"));
+  draggedIndex = null;
+  dragOverIndex = null;
 }
 
 export function renderTrackActiveStylings() {
