@@ -1,0 +1,14 @@
+# .htaccess en la raíz del proyecto
+RewriteEngine On
+RewriteBase /Audiophille_landing/
+
+# Redirigir todas las solicitudes no existentes a index.php (opcional)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]
+
+# Proteger archivos sensibles
+<FilesMatch "\.(sql|log|ini)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
